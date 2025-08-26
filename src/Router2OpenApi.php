@@ -5,12 +5,10 @@ declare(strict_types=1);
 namespace Nnahito\LaravelOpenApiRouter;
 
 use Illuminate\Console\Command;
-use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use ReflectionMethod;
-use Symfony\Component\Yaml\Yaml;
+use Nnahito\LaravelOpenApiRouter\Model\OpenApiModel;
+use Nnahito\LaravelOpenApiRouter\Model\RequestModel;
 
 class Router2OpenApi extends Command
 {
@@ -49,17 +47,14 @@ class Router2OpenApi extends Command
                 continue;
             }
 
-            $formRequestClass = $this->findFormRequestClass($controller, $method);
-            if ($formRequestClass === null) {
+            $requestModel = new RequestModel($controller, $method);
+            if ($requestModel->isFormRequestClass() === false) {
                 continue;
             }
 
-            /** @var \Illuminate\Foundation\Http\FormRequest $request */
-            $request = new $formRequestClass();
-            $rules = $request->rules();
-
             // ルートごとの JSON schema を生成
-            $jsonSpec = $this->makeOpenApiJson($route->uri(), $rules, $route);
+            $openApiModel = new OpenApiModel($route, $requestModel);
+            $jsonSpec = $openApiModel->makeOpenApiJson();
 
             // merge paths
             $paths = array_merge_recursive($paths, $jsonSpec);
@@ -72,112 +67,6 @@ class Router2OpenApi extends Command
         file_put_contents(storage_path('openapi.json'), json_encode($openApi, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 
         $this->info("✅ OpenAPI spec generated: storage/app/public/openapi.(json|yaml)");
-    }
-
-    private function findFormRequestClass($controller, $method): ?string
-    {
-        $rm = new ReflectionMethod($controller, $method);
-        foreach ($rm->getParameters() as $param) {
-            $type = $param->getType();
-            if ($type && !$type->isBuiltin() && is_subclass_of($type->getName(), FormRequest::class)) {
-                return $type->getName();
-            }
-        }
-        return null;
-    }
-
-    private function makeOpenApiJson(string $uri, array $rules, $route): array
-    {
-        $result = [
-            "/{$uri}" => []
-        ];
-
-        foreach ($route->methods() as $httpMethod) {
-            if ($httpMethod === 'HEAD') {
-                continue;
-            }
-
-            $properties = [];
-            $required = [];
-
-            foreach ($rules as $field => $ruleStr) {
-                $ruleArr = is_array($ruleStr) ? $ruleStr : explode('|', $ruleStr);
-
-                $schema = [
-                    'type' => 'string',
-                ];
-
-                if (in_array('integer', $ruleArr)) {
-                    $schema['type'] = 'integer';
-                } elseif (in_array('numeric', $ruleArr)) {
-                    $schema['type'] = 'number';
-                } elseif (in_array('boolean', $ruleArr)) {
-                    $schema['type'] = 'boolean';
-                } elseif (in_array('array', $ruleArr)) {
-                    $schema['type'] = 'array';
-                    $schema['items'] = ['type' => 'string'];
-                }
-
-                foreach ($ruleArr as $rule) {
-                    if (!is_string($rule)) {
-                        continue;
-                    }
-
-                    if ($rule === 'required') {
-                        $required[] = $field;
-                    }
-                    if ($rule === 'email') {
-                        $schema['format'] = 'email';
-                    }
-                    if (str_starts_with($rule, 'max:')) {
-                        $max = substr($rule, 4);
-                        if ($schema['type'] === 'string') {
-                            $schema['maxLength'] = (int)$max;
-                        } elseif (in_array($schema['type'], ['integer', 'number'])) {
-                            $schema['maximum'] = (int)$max;
-                        }
-                    }
-                    if (str_starts_with($rule, 'min:')) {
-                        $min = substr($rule, 4);
-                        if ($schema['type'] === 'string') {
-                            $schema['minLength'] = (int)$min;
-                        } elseif (in_array($schema['type'], ['integer', 'number'])) {
-                            $schema['minimum'] = (int)$min;
-                        }
-                    }
-                }
-
-                $properties[$field] = $schema;
-            }
-
-            $schema = [
-                'type' => 'object',
-                'properties' => $properties,
-            ];
-
-            if (!empty($required)) {
-                $schema['required'] = $required;
-            }
-
-            $result["/{$uri}"][strtolower($httpMethod)] = [
-                'summary' => "Auto generated for {$uri}",
-                'requestBody' => [
-                    'required' => true,
-                    'content' => [
-                        'application/json' => [
-                            'schema' => $schema
-                        ]
-                    ]
-                ],
-                'responses' => [
-                    '200' => [
-                        'description' => 'Success response'
-                    ]
-                ]
-            ];
-        }
-
-        return $result;
     }
 
     private function buildOpenApiSpec(array $paths): array
