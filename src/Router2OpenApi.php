@@ -116,6 +116,10 @@ class Router2OpenApi extends Command
                 }
 
                 foreach ($ruleArr as $rule) {
+                    if (!is_string($rule)) {
+                        continue;
+                    }
+
                     if ($rule === 'required') {
                         $required[] = $field;
                     }
