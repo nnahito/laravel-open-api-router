@@ -83,7 +83,7 @@ class Router2OpenApi extends Command
         return null;
     }
 
-    private function makeOpenApiJson(string $uri, array $rules, Route $route): array
+    private function makeOpenApiJson(string $uri, array $rules, $route): array
     {
         $result = [
             "/{$uri}" => []
