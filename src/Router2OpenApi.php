@@ -14,7 +14,14 @@ use Symfony\Component\Yaml\Yaml;
 
 class Router2OpenApi extends Command
 {
+    /**
+     * @var string command name
+     */
     protected $signature = 'app:laravel-router2-open-api';
+
+    /**
+     * @var string command description
+     */
     protected $description = 'Generate OpenAPI 3.0 spec from Laravel routes';
 
     public function handle()
@@ -62,11 +69,7 @@ class Router2OpenApi extends Command
         $openApi = $this->buildOpenApiSpec($paths);
 
         // JSON保存
-        Storage::put('public/openapi.json', json_encode($openApi, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
-
-        // YAML保存
-        $yaml = Yaml::dump($openApi, 20, 2, Yaml::DUMP_OBJECT_AS_MAP);
-        Storage::put('public/openapi.yaml', $yaml);
+        file_put_contents(storage_path('openapi.json'), json_encode($openApi, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 
         $this->info("✅ OpenAPI spec generated: storage/app/public/openapi.(json|yaml)");
     }
