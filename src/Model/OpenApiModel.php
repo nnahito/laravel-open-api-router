@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nnahito\LaravelOpenApiRouter\Model;
 
+use Illuminate\Contracts\Container\BindingResolutionException;
 use Illuminate\Routing\Route;
 
 class OpenApiModel
@@ -33,6 +34,7 @@ class OpenApiModel
 
     /**
      * @return array|array[] FormRequestの情報を元にAPI仕様書をOpenAPIの仕様で作成します
+     * @throws BindingResolutionException
      */
     private function makeRequestSpecs(): array
     {
@@ -107,6 +109,12 @@ class OpenApiModel
                 $schema['required'] = $required;
             }
 
+            $controller = $this->route->getController();
+            $method = $this->route->getActionMethod();
+
+            $responseModel = new ResponseModel($controller, $method);
+            $responseSchema = $responseModel->toOpenApiSchema();
+
             $result["/{$this->url}"][strtolower($httpMethod)] = [
                 'summary' => "Auto generated for {$this->url}",
                 'requestBody' => [
@@ -119,7 +127,12 @@ class OpenApiModel
                 ],
                 'responses' => [
                     '200' => [
-                        'description' => 'Success response'
+                        'description' => 'Success response',
+                        'content' => [
+                            'application/json' => [
+                                'schema' => $responseSchema
+                            ]
+                        ]
                     ]
                 ]
             ];
